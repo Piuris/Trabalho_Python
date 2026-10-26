@@ -10,7 +10,7 @@ webcam ──► MediaPipe Hands ──► 21 pontos (x,y,z) ──► normaliza
 
 ## Instalação
 
-Requer Python 3.10–3.12 (o MediaPipe ainda não tem suporte garantido para versões mais novas).
+Desenvolvido e testado com **Python 3.12**. As versões das bibliotecas estão fixadas no `requirements.txt` para o modelo salvo (`classificador.joblib`) carregar sem problemas.
 
 ```bash
 python -m venv .venv
