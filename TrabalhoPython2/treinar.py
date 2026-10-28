@@ -1,24 +1,3 @@
-"""Treina e compara classificadores para as letras de Libras.
-
-Uso:
-    python treinar.py
-
-O que o script faz:
-  1. Lê dados/landmarks.csv e transforma cada frame em 91 características (mao.py).
-  2. Compara 4 modelos (KNN, SVM, Random Forest, MLP) com dois tipos de validação:
-       - split ALEATÓRIO: frames vizinhos da mesma gravação caem no treino e no
-         teste. Como são quase idênticos, o resultado fica otimista demais
-         (vazamento de dados).
-       - split POR SESSÃO: uma gravação inteira fica só no treino ou só no
-         teste. É uma estimativa mais honesta do desempenho em uso real.
-  3. Se houver mais de uma pessoa: leave-one-person-out (treina com todas
-     menos uma e testa na que ficou de fora). Mede se o modelo serve para
-     alguém que ele nunca viu.
-  4. Ablação: quanto cada grupo de características (coordenadas, distâncias,
-     ângulos) contribui.
-  5. Gera matriz de confusão e relatório em relatorios/, e salva o melhor
-     modelo (treinado com todos os dados) em modelos/classificador.joblib.
-"""
 import argparse
 import time
 from pathlib import Path
@@ -29,26 +8,26 @@ import numpy as np
 import pandas as pd
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import seaborn as sns  # noqa: E402
-from sklearn.calibration import CalibratedClassifierCV  # noqa: E402
-from sklearn.ensemble import RandomForestClassifier  # noqa: E402
-from sklearn.metrics import classification_report, confusion_matrix  # noqa: E402
-from sklearn.model_selection import (  # noqa: E402
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import (
     LeaveOneGroupOut,
     StratifiedGroupKFold,
     StratifiedKFold,
     cross_val_predict,
     cross_validate,
 )
-from sklearn.neighbors import KNeighborsClassifier  # noqa: E402
-from sklearn.neural_network import MLPClassifier  # noqa: E402
-from sklearn.pipeline import make_pipeline  # noqa: E402
-from sklearn.preprocessing import StandardScaler  # noqa: E402
-from sklearn.svm import SVC  # noqa: E402
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
-from config import ARQUIVO_CLASSIFICADOR, ARQUIVO_DADOS, PASTA_RELATORIOS  # noqa: E402
-from mao import GRUPOS_CARACTERISTICAS, extrair_caracteristicas  # noqa: E402
+from config import ARQUIVO_CLASSIFICADOR, ARQUIVO_DADOS, PASTA_RELATORIOS
+from mao import GRUPOS_CARACTERISTICAS, extrair_caracteristicas
 
 COLUNAS_PONTOS = [f"{eixo}{i}" for i in range(21) for eixo in "xyz"]
 
@@ -61,13 +40,8 @@ def carregar(caminho: Path):
 
 
 def criar_modelos():
-    # KNN, SVM e MLP dependem de distâncias/gradientes → precisam de
-    # padronização (média 0, desvio 1). Árvores não ligam para escala.
     return {
         "KNN": make_pipeline(StandardScaler(), KNeighborsClassifier(n_neighbors=5)),
-        # O SVM não gera probabilidades por si só; o CalibratedClassifierCV
-        # ajusta uma sigmoide sobre as distâncias à margem para obtê-las
-        # (o tradutor precisa de probabilidades para o limiar de confiança).
         "SVM (RBF)": make_pipeline(
             StandardScaler(),
             CalibratedClassifierCV(SVC(C=10, gamma="scale"), ensemble=False),
@@ -249,8 +223,6 @@ def main():
     for frac, real, prev in confusoes[:5]:
         print(f"  {real} → {prev}: {frac * 100:.1f}%")
 
-    # Modelo final: treinado com TODOS os dados (a validação acima só serviu
-    # para escolher o modelo e estimar o desempenho).
     melhor.fit(X, y)
     joblib.dump({"modelo": melhor, "nome": melhor_nome, "letras": list(melhor.classes_)},
                 args.modelo)

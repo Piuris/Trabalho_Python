@@ -1,18 +1,3 @@
-"""Coleta do dataset pela webcam.
-
-Uso:
-    python coletar.py --pessoa joao
-
-Controles:
-    tecla de uma letra  → seleciona a letra que vai ser gravada
-    ESPAÇO              → contagem regressiva e grava N amostras dessa letra
-    ESC                 → sai
-
-Cada linha do CSV é UM frame: letra, pessoa, sessão, lado da mão e os
-21 pontos (x, y, z) já corrigidos pela proporção do frame. Guardamos os pontos
-"crus" (e não as características) para poder mudar a normalização depois sem
-precisar regravar nada.
-"""
 import argparse
 import csv
 import time
@@ -44,7 +29,6 @@ def escrever(frame, texto, pos, escala=0.7, cor=(255, 255, 255), espessura=2):
 
 
 def desenhar_painel(frame, contagem, letra_atual):
-    """Lista as letras com a quantidade de amostras já coletadas."""
     x0, y = frame.shape[1] - 130, 25
     for letra in LETRAS:
         n = contagem.get(letra, 0)
@@ -85,7 +69,6 @@ def main():
             ok, frame = camera.read()
             if not ok:
                 break
-            # Espelha a imagem para a tela funcionar como um espelho.
             frame = cv2.flip(frame, 1)
             mao = detector.detectar(frame)
             if mao:
@@ -126,8 +109,6 @@ def main():
                 gravando = True
                 inicio_gravacao = time.monotonic()
                 restantes = args.amostras
-                # Cada gravação é uma "sessão". No treino, frames da mesma sessão
-                # nunca são separados entre treino e teste (ver treinar.py).
                 sessao = f"{args.pessoa}_{letra_atual}_{int(time.time())}"
             elif 0 < tecla < 128 and chr(tecla).upper() in LETRAS and not gravando:
                 letra_atual = chr(tecla).upper()

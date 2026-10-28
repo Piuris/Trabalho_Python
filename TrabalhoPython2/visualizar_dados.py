@@ -1,13 +1,3 @@
-"""Gráficos exploratórios do dataset (bons para a apresentação).
-
-Uso:
-    python visualizar_dados.py
-
-Gera em relatorios/:
-  - amostras_por_letra.png : balanceamento do dataset
-  - maos_medias.png        : a "mão média" de cada letra depois da normalização
-  - pca.png                : as 91 características projetadas em 2D (PCA)
-"""
 import argparse
 from pathlib import Path
 
@@ -15,14 +5,14 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import seaborn as sns  # noqa: E402
-from sklearn.decomposition import PCA  # noqa: E402
-from sklearn.preprocessing import StandardScaler  # noqa: E402
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
-from config import ARQUIVO_DADOS, PASTA_RELATORIOS  # noqa: E402
-from mao import CONEXOES, normalizar  # noqa: E402
-from treinar import COLUNAS_PONTOS, carregar  # noqa: E402
+from config import ARQUIVO_DADOS, PASTA_RELATORIOS
+from mao import CONEXOES, normalizar
+from treinar import COLUNAS_PONTOS, carregar
 
 
 def grafico_amostras(df, caminho):
@@ -51,7 +41,7 @@ def grafico_maos_medias(df, caminho):
         ax.scatter(media[:, 0], media[:, 1], s=8, color="tab:red", zorder=3)
         ax.set_title(letra, fontsize=14, fontweight="bold")
         ax.set_aspect("equal")
-        ax.invert_yaxis()   # na imagem o y cresce para baixo
+        ax.invert_yaxis()
     fig.suptitle("Mão média de cada letra (após normalização)")
     plt.tight_layout()
     plt.savefig(caminho, dpi=150)

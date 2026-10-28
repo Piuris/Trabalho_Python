@@ -1,8 +1,3 @@
-"""Detecção da mão (MediaPipe), normalização dos pontos e extração de características.
-
-Este módulo é usado pelos três scripts (coleta, treino e tradutor), garantindo
-que os dados passem EXATAMENTE pelo mesmo pré-processamento em todas as etapas.
-"""
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -15,9 +10,6 @@ from mediapipe.tasks.python import vision
 
 from config import ARQUIVO_MODELO_MAO, URL_MODELO_MAO
 
-# Os 21 pontos da mão no MediaPipe:
-#   0 = pulso
-#   1-4 = polegar | 5-8 = indicador | 9-12 = médio | 13-16 = anelar | 17-20 = mínimo
 CONEXOES = [
     (0, 1), (1, 2), (2, 3), (3, 4),
     (0, 5), (5, 6), (6, 7), (7, 8),
@@ -28,8 +20,6 @@ CONEXOES = [
 ]
 PONTAS_DEDOS = [4, 8, 12, 16, 20]
 
-# Trincas (a, b, c): ângulo medido no ponto b, entre os segmentos b→a e b→c.
-# Cada dedo tem 3 articulações → 15 ângulos que dizem o quanto cada dedo está dobrado.
 ARTICULACOES = [
     (0, 1, 2), (1, 2, 3), (2, 3, 4),
     (0, 5, 6), (5, 6, 7), (6, 7, 8),
@@ -38,15 +28,12 @@ ARTICULACOES = [
     (0, 17, 18), (17, 18, 19), (18, 19, 20),
 ]
 
-# Pares de pontas de dedos (polegar-indicador, polegar-médio, ...) → 10 distâncias.
 PARES_PONTAS = [
     (PONTAS_DEDOS[i], PONTAS_DEDOS[j])
     for i in range(len(PONTAS_DEDOS))
     for j in range(i + 1, len(PONTAS_DEDOS))
 ]
 
-# Pontos do indicador (meio, ponta da articulação e ponta do dedo) usados como
-# referência para saber se a ponta do polegar está na frente ou atrás dele.
 REFERENCIAS_POLEGAR = [6, 7, 8]
 
 N_COORDS = 21 * 3
@@ -63,19 +50,11 @@ GRUPOS_CARACTERISTICAS = {
 
 @dataclass
 class Mao:
-    pontos: np.ndarray   # (21, 3) em coordenadas da imagem (x, y entre 0 e 1)
-    lado: str            # "Left" ou "Right", segundo o MediaPipe
-    proporcao: float     # largura / altura do frame
+    pontos: np.ndarray
+    lado: str
+    proporcao: float
 
     def pontos_corrigidos(self) -> np.ndarray:
-        """Coloca x, y e z na mesma unidade.
-
-        O MediaPipe devolve x dividido pela LARGURA e y dividido pela ALTURA.
-        Num frame 640x480, uma distância de 0.1 em x vale 64 px, mas em y vale
-        48 px. Multiplicar x (e z, que usa a mesma escala de x) pela proporção
-        deixa tudo em "unidades de altura", e a geometria da mão deixa de ser
-        esticada.
-        """
         p = self.pontos.copy()
         p[:, 0] *= self.proporcao
         p[:, 2] *= self.proporcao
@@ -91,13 +70,10 @@ def baixar_modelo_mao():
 
 
 class DetectorMao:
-    """Wrapper do HandLandmarker (API "Tasks" do MediaPipe) em modo de vídeo."""
 
     def __init__(self, confianca: float = 0.6):
         baixar_modelo_mao()
         opcoes = vision.HandLandmarkerOptions(
-            # Passamos os bytes em vez do caminho: evita problemas com
-            # caminhos que têm acentos/espaços no Windows.
             base_options=mp_python.BaseOptions(
                 model_asset_buffer=ARQUIVO_MODELO_MAO.read_bytes()
             ),
@@ -115,10 +91,6 @@ class DetectorMao:
         altura, largura = frame_bgr.shape[:2]
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         imagem = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-
-        # No modo VIDEO o timestamp precisa ser estritamente crescente:
-        # o MediaPipe usa os frames anteriores para RASTREAR a mão
-        # (mais rápido e estável do que detectar do zero a cada frame).
         ms = int((time.monotonic() - self._inicio) * 1000)
         ms = max(ms, self._ultimo_ms + 1)
         self._ultimo_ms = ms
@@ -143,19 +115,6 @@ class DetectorMao:
 
 
 def normalizar(pontos: np.ndarray, lado: str) -> np.ndarray:
-    """Torna os pontos independentes de POSIÇÃO, ESCALA e de qual mão é usada.
-
-    1. Translação: o pulso (ponto 0) vira a origem → não importa onde a mão
-       está na tela.
-    2. Espelhamento: se for a mão esquerda, invertemos o eixo x → o mesmo
-       modelo serve para destros e canhotos.
-    3. Escala: dividimos pelo tamanho da palma (pulso → base do dedo médio)
-       → não importa se a mão está perto ou longe da câmera. A palma é usada
-       porque o tamanho dela não muda quando os dedos dobram.
-
-    NÃO normalizamos a rotação de propósito: em Libras a orientação da mão
-    faz parte do sinal (ex.: em algumas letras a mão aponta para baixo).
-    """
     p = pontos.astype(np.float32).copy()
     p -= p[0]
     if lado == "Left":
@@ -176,29 +135,12 @@ def _angulos(p: np.ndarray) -> np.ndarray:
 
 
 def _profundidade_polegar(p: np.ndarray) -> np.ndarray:
-    """O polegar está NA FRENTE ou ATRÁS do indicador? (ex.: diferença entre F e T)
-
-    Calculamos o vetor normal da palma (perpendicular a ela) com o produto
-    vetorial de pulso→base do indicador e pulso→base do mínimo. Depois
-    projetamos o vetor "indicador → ponta do polegar" nessa normal:
-      valor > 0 → polegar de um lado do indicador (ex.: na frente)
-      valor < 0 → polegar do outro lado (ex.: atrás)
-    Por ser medido em relação à própria palma, o valor não muda quando a mão
-    inteira gira. O z puro mudaria, e o modelo acabaria aprendendo a rotação.
-    """
     normal = np.cross(p[5] - p[0], p[17] - p[0])
     normal /= np.linalg.norm(normal) + 1e-8
     return np.array([np.dot(p[4] - p[k], normal) for k in REFERENCIAS_POLEGAR])
 
 
 def extrair_caracteristicas(pontos: np.ndarray, lado: str) -> np.ndarray:
-    """Vetor de 91 características usado pelo classificador.
-
-    - 63 coordenadas normalizadas (21 pontos × xyz)
-    - 10 distâncias entre pontas de dedos (ex.: polegar encostando no indicador)
-    - 15 ângulos das articulações (o quanto cada dedo está dobrado)
-    -  3 profundidades do polegar em relação ao indicador (frente/atrás)
-    """
     p = normalizar(pontos, lado)
     distancias = [np.linalg.norm(p[i] - p[j]) for i, j in PARES_PONTAS]
     return np.concatenate(

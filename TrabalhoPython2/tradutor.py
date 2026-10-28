@@ -1,25 +1,3 @@
-"""Tradutor de alfabeto manual de Libras em tempo real.
-
-Uso:
-    python tradutor.py
-
-Controles:
-    segurar uma letra   → a barra enche e a letra é digitada
-    ESPAÇO              → insere espaço
-    BACKSPACE           → apaga a última letra
-    ENTER               → limpa o texto
-    ESC                 → sai
-
-Uma previsão por frame oscila muito (a mão treme, o MediaPipe erra um
-frame aqui e ali). Por isso a decisão passa por três filtros:
-  1. Confiança: frames com probabilidade < CONFIANCA_MINIMA não votam.
-  2. Votação: a letra precisa ganhar FRACAO_VOTOS dos últimos
-     JANELA_SUAVIZACAO frames para ser considerada "estável".
-  3. Tempo: a letra estável precisa ser mantida por TEMPO_CONFIRMACAO
-     segundos para ser digitada.
-Para repetir a mesma letra (ex.: "SS"), tire a mão da câmera por um instante
-e mostre a letra de novo.
-"""
 import argparse
 import time
 from collections import Counter, deque
@@ -47,7 +25,6 @@ def escrever(frame, texto, pos, escala=0.7, cor=(255, 255, 255), espessura=2):
 
 
 def desenhar_top3(frame, letras, probabilidades):
-    """Barras com as 3 letras mais prováveis no frame atual."""
     x0, y0, largura_max = frame.shape[1] - 230, 30, 150
     for k, i in enumerate(np.argsort(probabilidades)[::-1][:3]):
         y = y0 + k * 35
@@ -85,7 +62,7 @@ def main():
     votos = deque(maxlen=JANELA_SUAVIZACAO)
     texto = ""
     candidata, inicio_candidata = None, 0.0
-    ultima_digitada = None        # bloqueia repetição até a letra mudar
+    ultima_digitada = None
     ultimo_tempo, fps = time.perf_counter(), 0.0
 
     with DetectorMao() as detector:
@@ -105,8 +82,6 @@ def main():
                 desenhar_top3(frame, letras, probabilidades)
             else:
                 votos.append(None)
-
-            # Votação na janela de frames
             estavel = None
             if len(votos) == votos.maxlen:
                 letra, n = Counter(votos).most_common(1)[0]
@@ -117,7 +92,6 @@ def main():
             if estavel != candidata:
                 candidata, inicio_candidata = estavel, agora
             if estavel is None:
-                # Mão fora ou sinal instável → libera repetir a última letra
                 if not mao:
                     ultima_digitada = None
             elif estavel != ultima_digitada:
@@ -131,7 +105,6 @@ def main():
             else:
                 escrever(frame, estavel, (30, 110), 3.0, (0, 200, 0), 5)
 
-            # FPS (média móvel exponencial)
             t = time.perf_counter()
             fps = 0.9 * fps + 0.1 / max(t - ultimo_tempo, 1e-6)
             ultimo_tempo = t
